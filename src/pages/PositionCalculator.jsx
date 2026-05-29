@@ -193,7 +193,7 @@ function SymbolSelect({ value, onChange }) {
         />
         <button
           aria-label="展开币种列表"
-          className="absolute right-2 top-1/2 rounded-md p-2 text-muted transition hover:bg-panelSoft hover:text-white"
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-2 text-muted transition hover:bg-panelSoft hover:text-white"
           type="button"
           onClick={() => setIsOpen((current) => !current)}
         >
@@ -204,7 +204,7 @@ function SymbolSelect({ value, onChange }) {
       {isOpen ? (
         <div
           id="symbol-options"
-          className="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-ink shadow-trading"
+          className="mt-2 max-h-56 w-full overflow-y-auto rounded-lg border border-line bg-ink shadow-trading"
           role="listbox"
         >
           {filteredSymbols.length > 0 ? (
