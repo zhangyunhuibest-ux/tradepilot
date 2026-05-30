@@ -6,9 +6,12 @@ import {
   ShieldAlert,
   Target,
   TrendingUp,
-  Wallet
+  Wallet,
+  Wifi,
+  WifiOff
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLivePrice } from "../hooks/useLivePrice";
 
 const initialForm = {
   symbol: "BTC/USDT",
@@ -109,11 +112,76 @@ function formatCurrency(value) {
   }).format(value || 0);
 }
 
+function formatPrice(value) {
+  if (!value) {
+    return "--";
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: value >= 1 ? 2 : 6,
+    maximumFractionDigits: value >= 1 ? 2 : 8
+  }).format(value);
+}
+
 function formatNumber(value, digits = 2) {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits
   }).format(value || 0);
+}
+
+function LivePriceCard({ symbol, priceState }) {
+  const hasError = Boolean(priceState.error);
+  const statusLabel = hasError
+    ? "价格获取失败"
+    : priceState.isLoading
+      ? "价格同步中"
+      : "实时价格";
+  const updatedTime = priceState.updatedAt
+    ? new Intl.DateTimeFormat("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      }).format(new Date(priceState.updatedAt))
+    : "--";
+  const Icon = hasError ? WifiOff : Wifi;
+
+  return (
+    <section className="rounded-lg border border-profit/20 bg-ink/80 p-4 shadow-trading">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className={`rounded-md p-2 ${
+              hasError ? "bg-loss/10 text-loss" : "bg-profit/10 text-profit"
+            }`}
+          >
+            <Icon aria-hidden="true" className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-profit">
+              Live Market Price
+            </p>
+            <h2 className="mt-1 text-lg font-semibold tracking-normal text-white">
+              {symbol}
+            </h2>
+          </div>
+        </div>
+
+        <div className="sm:text-right">
+          <p
+            className={`text-2xl font-semibold tracking-normal ${
+              hasError ? "text-loss" : "text-profit"
+            }`}
+          >
+            {hasError ? "价格获取失败" : `$${formatPrice(priceState.price)}`}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {statusLabel} · {priceState.source} · 更新 {updatedTime}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function InputField({ field, value, onChange }) {
@@ -285,6 +353,19 @@ function ResultCard({ label, value, helper, tone = "neutral", icon: Icon }) {
 
 export default function PositionCalculator() {
   const [form, setForm] = useState(initialForm);
+  const [shouldSyncEntryPrice, setShouldSyncEntryPrice] = useState(true);
+  const livePrice = useLivePrice(form.symbol);
+
+  useEffect(() => {
+    if (!shouldSyncEntryPrice || !livePrice.price) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      entryPrice: String(livePrice.price)
+    }));
+  }, [livePrice.price, shouldSyncEntryPrice]);
 
   const calculation = useMemo(
     () =>
@@ -301,7 +382,16 @@ export default function PositionCalculator() {
   );
 
   function updateField(key, value) {
+    if (key === "entryPrice") {
+      setShouldSyncEntryPrice(false);
+    }
+
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateSymbol(symbol) {
+    setShouldSyncEntryPrice(true);
+    updateField("symbol", symbol);
   }
 
   const baseAsset = form.symbol.split("/")[0] || "COIN";
@@ -375,10 +465,14 @@ export default function PositionCalculator() {
             </div>
           </div>
 
+          <div className="mt-5">
+            <LivePriceCard symbol={form.symbol} priceState={livePrice} />
+          </div>
+
           <div className="mt-6 grid grid-cols-1 gap-4">
             <SymbolSelect
               value={form.symbol}
-              onChange={(symbol) => updateField("symbol", symbol)}
+              onChange={updateSymbol}
             />
 
             <fieldset>
