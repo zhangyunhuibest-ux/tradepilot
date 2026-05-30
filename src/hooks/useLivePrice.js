@@ -13,10 +13,14 @@ export function useLivePrice(symbol) {
   });
 
   useEffect(() => {
-    const controller = new AbortController();
     let isMounted = true;
+    let activeController = null;
 
     async function loadPrice({ showLoading = false } = {}) {
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
+
       if (showLoading) {
         setState((current) => ({ ...current, isLoading: true, error: null }));
       }
@@ -53,7 +57,7 @@ export function useLivePrice(symbol) {
 
     return () => {
       isMounted = false;
-      controller.abort();
+      activeController?.abort();
       window.clearInterval(intervalId);
     };
   }, [symbol]);
