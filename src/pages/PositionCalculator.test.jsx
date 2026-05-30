@@ -1,5 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PositionCalculator, { calculatePosition } from "./PositionCalculator";
+
+function mockPriceResponse(price = "50000") {
+  fetch.mockResolvedValue({
+    ok: true,
+    json: async () => ({ symbol: "BTCUSDT", price })
+  });
+}
 
 describe("calculatePosition", () => {
   it("calculates long position risk, margin, expected profit, and reward ratio", () => {
@@ -44,9 +52,19 @@ describe("calculatePosition", () => {
 });
 
 describe("PositionCalculator", () => {
-  it("renders inputs and updates highlighted results", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+    mockPriceResponse();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders inputs and updates highlighted results", async () => {
     render(<PositionCalculator />);
 
+    await screen.findByText("$50,000.00");
     fireEvent.change(screen.getByLabelText("币种"), { target: { value: "BTC/USDT" } });
     fireEvent.change(screen.getByLabelText("本金"), { target: { value: "10000" } });
     fireEvent.change(screen.getByLabelText("风险比例"), { target: { value: "2" } });
@@ -61,13 +79,42 @@ describe("PositionCalculator", () => {
     expect(screen.getByText("3.00 R")).toBeInTheDocument();
   });
 
-  it("lets users search and select a single crypto symbol from the dropdown", () => {
+  it("lets users search and select a single crypto symbol from the dropdown", async () => {
     render(<PositionCalculator />);
 
+    await screen.findByText("$50,000.00");
     fireEvent.change(screen.getByLabelText("币种"), { target: { value: "sol" } });
     fireEvent.click(screen.getByRole("option", { name: "SOL/USDT Solana" }));
 
     expect(screen.getByLabelText("币种")).toHaveValue("SOL/USDT");
     expect(screen.getByText("0.200000 SOL")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT",
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
+    );
+  });
+
+  it("loads live price into the entry price", async () => {
+    render(<PositionCalculator />);
+
+    await waitFor(() => expect(screen.getByLabelText("开仓价")).toHaveValue(50000));
+    expect(screen.getByText("$50,000.00")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
+
+  it("shows an error state when live price fetching fails", async () => {
+    fetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({})
+    });
+
+    render(<PositionCalculator />);
+
+    expect(await screen.findByText("价格获取失败")).toBeInTheDocument();
   });
 });
