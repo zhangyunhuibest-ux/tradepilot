@@ -108,7 +108,7 @@ describe("PositionCalculator", () => {
   });
 
   it("shows an error state when live price fetching fails", async () => {
-    fetch.mockResolvedValueOnce({
+    fetch.mockResolvedValue({
       ok: false,
       json: async () => ({})
     });
