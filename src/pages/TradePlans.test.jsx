@@ -2,58 +2,69 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import TradePlans from "./TradePlans";
 import { STORAGE_KEYS } from "../utils/storage";
 
+function getStoredPlans() {
+  return JSON.parse(window.localStorage.getItem(STORAGE_KEYS.tradePlans));
+}
+
+function getPlanCard(symbol) {
+  return screen.getByRole("heading", { name: symbol }).closest("article");
+}
+
 describe("TradePlans", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  it("renders mock trade plans in a responsive table", () => {
+  it("renders lifecycle sections and statistics panel", () => {
     render(<TradePlans />);
 
-    const table = screen.getByRole("table", { name: "交易计划表格" });
     expect(screen.getByRole("heading", { name: "交易计划" })).toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "币种" })).toBeInTheDocument();
-    expect(within(table).getByText("BTC/USDT")).toBeInTheDocument();
-    expect(within(table).getByText("SOL/USDT")).toBeInTheDocument();
-    expect(within(table).getByDisplayValue("计划中")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "交易统计" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "当前进行中交易" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "历史交易" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "BTC/USDT" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ETH/USDT" })).toBeInTheDocument();
+    expect(screen.getByText("胜率")).toBeInTheDocument();
   });
 
-  it("updates a plan status", () => {
+  it("moves a plan to open status and records openTime", () => {
     render(<TradePlans />);
 
-    const table = screen.getByRole("table", { name: "交易计划表格" });
-    const btcRow = within(table).getByRole("row", { name: /BTC\/USDT/ });
-    fireEvent.change(within(btcRow).getByLabelText("修改 BTC/USDT 状态"), {
-      target: { value: "已完成" }
-    });
+    fireEvent.click(within(getPlanCard("BTC/USDT")).getByRole("button", { name: "已开仓" }));
 
-    expect(within(btcRow).getByDisplayValue("已完成")).toBeInTheDocument();
+    const btcPlan = getStoredPlans().find((plan) => plan.symbol === "BTC/USDT");
+    expect(btcPlan.status).toBe("已开仓");
+    expect(btcPlan.openTime).toEqual(expect.any(String));
   });
 
-  it("edits entry price for a plan", () => {
+  it("archives stopped plans and records final loss", () => {
     render(<TradePlans />);
 
-    const table = screen.getByRole("table", { name: "交易计划表格" });
-    fireEvent.click(within(table).getByRole("button", { name: "编辑 BTC/USDT" }));
-    fireEvent.change(screen.getByLabelText("编辑开仓价"), {
-      target: { value: "51200" }
+    fireEvent.click(within(getPlanCard("BTC/USDT")).getByRole("button", { name: "已止损" }));
+
+    const btcPlan = getStoredPlans().find((plan) => plan.symbol === "BTC/USDT");
+    expect(btcPlan.status).toBe("已止损");
+    expect(btcPlan.closeTime).toEqual(expect.any(String));
+    expect(btcPlan.finalResult).toBe("loss");
+    expect(btcPlan.finalProfit).toBeLessThan(0);
+  });
+
+  it("edits final profit for manual close plans", () => {
+    render(<TradePlans />);
+
+    fireEvent.click(within(getPlanCard("BTC/USDT")).getByRole("button", { name: "手动平仓" }));
+    fireEvent.click(within(getPlanCard("BTC/USDT")).getByRole("button", { name: "编辑 BTC/USDT" }));
+    fireEvent.change(screen.getByLabelText("编辑最终盈亏"), {
+      target: { value: "125" }
     });
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
 
-    const btcRow = within(table).getByRole("row", { name: /BTC\/USDT/ });
-    expect(within(btcRow).getByText("51,200")).toBeInTheDocument();
+    const btcPlan = getStoredPlans().find((plan) => plan.symbol === "BTC/USDT");
+    expect(btcPlan.finalProfit).toBe(125);
+    expect(btcPlan.finalResult).toBe("win");
   });
 
-  it("deletes a plan", () => {
-    render(<TradePlans />);
-
-    const table = screen.getByRole("table", { name: "交易计划表格" });
-    fireEvent.click(within(table).getByRole("button", { name: "删除 ETH/USDT" }));
-
-    expect(within(table).queryByText("ETH/USDT")).not.toBeInTheDocument();
-  });
-
-  it("persists added trade plans and reloads them from localStorage", () => {
+  it("persists added manual trade plans and reloads them", () => {
     const { unmount } = render(<TradePlans />);
 
     fireEvent.click(screen.getByRole("button", { name: "新增交易计划" }));
@@ -69,28 +80,21 @@ describe("TradePlans", () => {
     fireEvent.change(screen.getByLabelText("新增止盈价"), {
       target: { value: "0.24" }
     });
-    fireEvent.change(screen.getByLabelText("新增盈亏比"), {
-      target: { value: "3" }
-    });
     fireEvent.click(screen.getByRole("button", { name: "保存新增计划" }));
 
-    const storedPlans = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.tradePlans));
-    expect(storedPlans.some((plan) => plan.symbol === "DOGE/USDT")).toBe(true);
+    expect(getStoredPlans().some((plan) => plan.symbol === "DOGE/USDT")).toBe(true);
 
     unmount();
     render(<TradePlans />);
 
-    const table = screen.getByRole("table", { name: "交易计划表格" });
-    expect(within(table).getByText("DOGE/USDT")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "DOGE/USDT" })).toBeInTheDocument();
   });
 
   it("syncs deletions to localStorage", () => {
     render(<TradePlans />);
 
-    const table = screen.getByRole("table", { name: "交易计划表格" });
-    fireEvent.click(within(table).getByRole("button", { name: "删除 ETH/USDT" }));
+    fireEvent.click(within(getPlanCard("ETH/USDT")).getByRole("button", { name: "删除 ETH/USDT" }));
 
-    const storedPlans = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.tradePlans));
-    expect(storedPlans.some((plan) => plan.symbol === "ETH/USDT")).toBe(false);
+    expect(getStoredPlans().some((plan) => plan.symbol === "ETH/USDT")).toBe(false);
   });
 });
