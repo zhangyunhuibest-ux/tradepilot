@@ -348,25 +348,11 @@ function formatPercent(value) {
 
 function LiquidationRiskCard({ calculation }) {
   const levelTone = {
-    安全: "border-profit/30 bg-profit/10 text-profit",
-    正常: "border-sky-400/30 bg-sky-400/10 text-sky-300",
-    危险: "border-warning/30 bg-warning/10 text-warning",
-    极危险: "border-loss/30 bg-loss/10 text-loss"
+    非常安全: "border-profit/30 bg-profit/10 text-profit",
+    安全: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+    偏危险: "border-warning/30 bg-warning/10 text-warning",
+    高风险: "border-loss/30 bg-loss/10 text-loss"
   }[calculation.liquidationRiskLevel];
-  const analysisItems = [
-    calculation.marginUsageRate > 0.6
-      ? "仓位偏重，保证金占用较高。"
-      : "仓位占用可控，保证金压力较低。",
-    calculation.liquidationSafetySpace <= 0
-      ? "止损已贴近或越过爆仓区域，需重新检查参数。"
-      : "止损价与估算爆仓价之间仍有缓冲。",
-    calculation.riskBuffer < calculation.maxLoss
-      ? "风险缓冲区小于计划最大亏损，极端行情下抗波动能力不足。"
-      : "风险缓冲区覆盖计划最大亏损。",
-    calculation.liquidationRiskLevel === "极危险"
-      ? "保证金利用率超过 80%，极端行情风险高。"
-      : "当前不是极端保证金占用状态。"
-  ];
 
   return (
     <section className="mt-5 rounded-lg border border-line/80 bg-ink/80 p-4 shadow-trading">
@@ -376,7 +362,9 @@ function LiquidationRiskCard({ calculation }) {
             Liquidation Risk
           </p>
           <h3 className="mt-2 text-xl font-semibold text-white">爆仓风险分析</h3>
-          <p className="mt-1 text-xs text-muted">当前为简化估算，未包含维持保证金和交易所规则。</p>
+          <p className="mt-1 text-xs text-muted">
+            当前爆仓价为简化估算，实际以交易所规则为准
+          </p>
         </div>
         <span className={`w-fit rounded-full border px-3 py-1.5 text-sm font-semibold ${levelTone}`}>
           {calculation.liquidationRiskLevel}
@@ -385,25 +373,15 @@ function LiquidationRiskCard({ calculation }) {
 
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         {[
-          ["仓位价值", formatCurrency(calculation.positionValue)],
-          ["已用保证金", formatCurrency(calculation.margin)],
-          ["保证金利用率", formatPercent(calculation.marginUsageRate)],
-          ["风险缓冲区", formatCurrency(calculation.riskBuffer)],
           ["估算爆仓价", formatCurrency(calculation.estimatedLiquidationPrice)],
-          ["爆仓安全空间", formatCurrency(calculation.liquidationSafetySpace)]
+          ["爆仓安全空间", formatPercent(calculation.liquidationSafetySpace / 100)],
+          ["风险等级", calculation.liquidationRiskLevel],
+          ["风险提示", calculation.liquidationRiskWarning]
         ].map(([label, value]) => (
           <div key={label} className="rounded-md border border-line bg-panel/60 p-3">
             <p className="text-xs text-muted">{label}</p>
             <p className="mt-1 font-semibold text-white">{value}</p>
           </div>
-        ))}
-      </div>
-
-      <div className="mt-4 space-y-2 border-t border-line/70 pt-4">
-        {analysisItems.map((item) => (
-          <p key={item} className="text-sm text-slate-300">
-            {item}
-          </p>
         ))}
       </div>
     </section>
