@@ -30,8 +30,9 @@ describe("calculatePosition", () => {
     expect(result.marginUsageRate).toBe(0.2);
     expect(result.riskBuffer).toBe(8000);
     expect(result.estimatedLiquidationPrice).toBe(40000);
-    expect(result.liquidationSafetySpace).toBe(9000);
-    expect(result.liquidationRiskLevel).toBe("安全");
+    expect(result.liquidationSafetySpace).toBe(18);
+    expect(result.liquidationRiskLevel).toBe("非常安全");
+    expect(result.liquidationRiskWarning).toBe("止损与爆仓价距离充足，爆仓风险相对较低。");
     expect(result.expectedProfit).toBe(600);
     expect(result.rewardRiskRatio).toBe(3);
   });
@@ -53,9 +54,26 @@ describe("calculatePosition", () => {
     expect(result.positionValue).toBe(3000);
     expect(result.margin).toBe(300);
     expect(result.estimatedLiquidationPrice).toBeCloseTo(3300);
-    expect(result.liquidationSafetySpace).toBeCloseTo(200);
+    expect(result.liquidationSafetySpace).toBeCloseTo(6.6666);
+    expect(result.liquidationRiskLevel).toBe("安全");
     expect(result.expectedProfit).toBe(300);
     expect(result.rewardRiskRatio).toBe(3);
+  });
+
+  it("marks stop loss inside liquidation zone as high risk", () => {
+    const result = calculatePosition({
+      side: "long",
+      capital: 10000,
+      riskPercent: 2,
+      entryPrice: 50000,
+      stopLossPrice: 39900,
+      takeProfitPrice: 53000,
+      leverage: 5
+    });
+
+    expect(result.estimatedLiquidationPrice).toBe(40000);
+    expect(result.liquidationRiskLevel).toBe("高风险");
+    expect(result.liquidationRiskWarning).toBe("当前止损已经进入爆仓区域");
   });
 });
 
@@ -87,7 +105,8 @@ describe("PositionCalculator", () => {
     expect(screen.getByText("0.200000 BTC")).toBeInTheDocument();
     expect(screen.getByText("3.00 R")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "爆仓风险分析" })).toBeInTheDocument();
-    expect(screen.getByText("保证金利用率")).toBeInTheDocument();
+    expect(screen.getByText("爆仓安全空间")).toBeInTheDocument();
+    expect(screen.getByText("当前爆仓价为简化估算，实际以交易所规则为准")).toBeInTheDocument();
   });
 
   it("lets users search and select a single crypto symbol from the dropdown", async () => {
@@ -136,7 +155,8 @@ describe("PositionCalculator", () => {
       quantity: 0.2,
       rewardRiskRatio: 3
     });
-    expect(storedPlans[0].liquidationRiskLevel).toBe("安全");
+    expect(storedPlans[0].liquidationRiskLevel).toBe("非常安全");
+    expect(storedPlans[0].liquidationRiskWarning).toBe("止损与爆仓价距离充足，爆仓风险相对较低。");
   });
 
   it("shows an error state when live price fetching fails", async () => {
