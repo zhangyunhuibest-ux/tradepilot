@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PositionCalculator, { calculatePosition } from "./PositionCalculator";
+import { STORAGE_KEYS } from "../utils/storage";
 
 function mockPriceResponse(price = "50000") {
   fetch.mockResolvedValue({
@@ -53,6 +54,7 @@ describe("calculatePosition", () => {
 
 describe("PositionCalculator", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     vi.stubGlobal("fetch", vi.fn());
     mockPriceResponse();
   });
@@ -105,6 +107,26 @@ describe("PositionCalculator", () => {
       "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     );
+  });
+
+  it("adds the calculated setup to trade plans", async () => {
+    render(<PositionCalculator />);
+
+    await waitFor(() => expect(screen.getByLabelText("开仓价")).toHaveValue(50000));
+    fireEvent.click(screen.getByRole("button", { name: "添加到交易计划" }));
+
+    expect(await screen.findByText("已添加到交易计划")).toBeInTheDocument();
+
+    const storedPlans = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.tradePlans));
+    expect(storedPlans[0]).toMatchObject({
+      symbol: "BTC/USDT",
+      side: "long",
+      source: "calculator",
+      status: "计划中",
+      maxLoss: 200,
+      quantity: 0.2,
+      rewardRiskRatio: 3
+    });
   });
 
   it("shows an error state when live price fetching fails", async () => {
