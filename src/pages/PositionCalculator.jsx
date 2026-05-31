@@ -2,6 +2,7 @@ import {
   Calculator,
   Check,
   ChevronDown,
+  ClipboardPlus,
   Search,
   ShieldAlert,
   Target,
@@ -11,6 +12,8 @@ import {
   WifiOff
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createCalculatorPlan, addPlanToStorage } from "../domain/planManager";
+import { calculateRisk } from "../domain/riskCalculator";
 import { useLivePrice } from "../hooks/useLivePrice";
 
 const initialForm = {
@@ -80,27 +83,15 @@ export function calculatePosition({
   takeProfitPrice,
   leverage
 }) {
-  const maxLoss = capital * (riskPercent / 100);
-  const unitRisk =
-    side === "long" ? entryPrice - stopLossPrice : stopLossPrice - entryPrice;
-  const quantity = unitRisk > 0 ? maxLoss / unitRisk : 0;
-  const positionValue = quantity * entryPrice;
-  const margin = leverage > 0 ? positionValue / leverage : 0;
-  const profitPerUnit =
-    side === "long" ? takeProfitPrice - entryPrice : entryPrice - takeProfitPrice;
-  const expectedProfit = quantity > 0 ? quantity * profitPerUnit : 0;
-  const rewardRiskRatio = maxLoss > 0 ? expectedProfit / maxLoss : 0;
-
-  return {
-    maxLoss,
-    unitRisk,
-    quantity,
-    positionValue,
-    margin,
-    expectedProfit,
-    rewardRiskRatio,
-    isValid: unitRisk > 0 && maxLoss > 0 && entryPrice > 0 && leverage > 0
-  };
+  return calculateRisk({
+    side,
+    capital,
+    riskPercent,
+    entryPrice,
+    stopLossPrice,
+    takeProfitPrice,
+    leverage
+  });
 }
 
 function formatCurrency(value) {
@@ -354,6 +345,7 @@ function ResultCard({ label, value, helper, tone = "neutral", icon: Icon }) {
 export default function PositionCalculator() {
   const [form, setForm] = useState(initialForm);
   const [shouldSyncEntryPrice, setShouldSyncEntryPrice] = useState(true);
+  const [toastMessage, setToastMessage] = useState("");
   const livePrice = useLivePrice(form.symbol);
 
   useEffect(() => {
@@ -393,6 +385,36 @@ export default function PositionCalculator() {
     setShouldSyncEntryPrice(true);
     updateField("symbol", symbol);
   }
+
+  function addToTradePlans() {
+    if (!calculation.isValid) {
+      setToastMessage("请先检查止损方向");
+      return;
+    }
+
+    const plan = createCalculatorPlan({
+      symbol: form.symbol,
+      side: form.side,
+      capital: toNumber(form.capital),
+      riskPercent: toNumber(form.riskPercent),
+      entryPrice: toNumber(form.entryPrice),
+      stopLossPrice: toNumber(form.stopLossPrice),
+      takeProfitPrice: toNumber(form.takeProfitPrice),
+      leverage: toNumber(form.leverage)
+    });
+
+    addPlanToStorage(plan);
+    setToastMessage("已添加到交易计划");
+  }
+
+  useEffect(() => {
+    if (!toastMessage) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => setToastMessage(""), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [toastMessage]);
 
   const baseAsset = form.symbol.split("/")[0] || "COIN";
   const resultCards = [
@@ -539,8 +561,23 @@ export default function PositionCalculator() {
               <ResultCard key={card.label} {...card} />
             ))}
           </div>
+
+          <button
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-profit px-4 py-3 font-semibold text-ink transition hover:bg-profit/90 disabled:cursor-not-allowed disabled:bg-muted"
+            type="button"
+            disabled={!calculation.isValid}
+            onClick={addToTradePlans}
+          >
+            <ClipboardPlus aria-hidden="true" className="h-5 w-5" />
+            添加到交易计划
+          </button>
         </section>
       </div>
+      {toastMessage ? (
+        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-profit/30 bg-ink px-4 py-3 text-sm font-medium text-profit shadow-trading">
+          {toastMessage}
+        </div>
+      ) : null}
     </main>
   );
 }
