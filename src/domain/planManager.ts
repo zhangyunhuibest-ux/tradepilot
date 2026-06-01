@@ -1,5 +1,7 @@
 import { calculateRisk, type RiskInput, type RiskResult, type TradeSide } from "./riskCalculator";
-import { getStorageItem, setStorageItem, STORAGE_KEYS } from "../utils/storage";
+import { scoreTradeQuality, type TradeScoreResult } from "./scoreEngine";
+import { calculateStatistics } from "./statisticsManager";
+import { getTradePilotData, updateTradePilotData } from "../utils/storage";
 
 export const PLAN_STATUSES = [
   "计划中",
@@ -15,7 +17,8 @@ export type PlanSource = "calculator" | "manual";
 export type FinalResult = "win" | "loss" | "breakeven" | "cancelled" | null;
 
 export type TradePlan = RiskInput &
-  RiskResult & {
+  RiskResult &
+  TradeScoreResult & {
     id: string;
     symbol: string;
     createdAt: string;
@@ -25,6 +28,13 @@ export type TradePlan = RiskInput &
     closeTime: string | null;
     finalProfit: number | null;
     finalResult: FinalResult;
+    review: string | null;
+    actualEntryPrice: number | null;
+    actualExitPrice: number | null;
+    fee: number | null;
+    slippage: number | null;
+    notes: string;
+    screenshots: string[];
   };
 
 export const activeStatuses: PlanStatus[] = ["计划中", "已开仓"];
@@ -77,6 +87,7 @@ export function createPlan(input: {
   createdAt?: string;
 }): TradePlan {
   const risk = calculateRisk(input);
+  const score = scoreTradeQuality({ ...input, ...risk });
 
   return {
     id: `plan-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -88,6 +99,13 @@ export function createPlan(input: {
     closeTime: null,
     finalProfit: null,
     finalResult: null,
+    review: null,
+    actualEntryPrice: null,
+    actualExitPrice: null,
+    fee: null,
+    slippage: null,
+    notes: "",
+    screenshots: [],
     side: input.side,
     capital: input.capital,
     riskPercent: input.riskPercent,
@@ -95,7 +113,8 @@ export function createPlan(input: {
     stopLossPrice: input.stopLossPrice,
     takeProfitPrice: input.takeProfitPrice,
     leverage: input.leverage,
-    ...risk
+    ...risk,
+    ...score
   };
 }
 
@@ -131,16 +150,52 @@ export function normalizePlan(rawPlan: any): TradePlan {
       rawPlan.finalProfit === null || rawPlan.finalProfit === undefined
         ? null
         : Number(rawPlan.finalProfit),
-    finalResult: rawPlan.finalResult || deriveFinalResult(status, rawPlan.finalProfit)
+    finalResult: rawPlan.finalResult || deriveFinalResult(status, rawPlan.finalProfit),
+    review: rawPlan.review || null,
+    actualEntryPrice:
+      rawPlan.actualEntryPrice === null || rawPlan.actualEntryPrice === undefined
+        ? null
+        : Number(rawPlan.actualEntryPrice),
+    actualExitPrice:
+      rawPlan.actualExitPrice === null || rawPlan.actualExitPrice === undefined
+        ? null
+        : Number(rawPlan.actualExitPrice),
+    fee: rawPlan.fee === null || rawPlan.fee === undefined ? null : Number(rawPlan.fee),
+    slippage:
+      rawPlan.slippage === null || rawPlan.slippage === undefined ? null : Number(rawPlan.slippage),
+    notes: rawPlan.notes || "",
+    screenshots: Array.isArray(rawPlan.screenshots) ? rawPlan.screenshots : []
+  };
+}
+
+export function recalculatePlan(plan: TradePlan, updates: Partial<RiskInput>): TradePlan {
+  const nextPlan = {
+    ...plan,
+    ...updates
+  };
+  const risk = calculateRisk(nextPlan);
+  const score = scoreTradeQuality({ ...nextPlan, ...risk });
+
+  return {
+    ...nextPlan,
+    ...risk,
+    ...score
   };
 }
 
 export function getStoredPlans(): TradePlan[] {
-  return getStorageItem(STORAGE_KEYS.tradePlans, samplePlans).map(normalizePlan);
+  return getTradePilotData(samplePlans).plans.map(normalizePlan);
 }
 
 export function savePlans(plans: TradePlan[]) {
-  setStorageItem(STORAGE_KEYS.tradePlans, plans);
+  const normalizedPlans = plans.map(normalizePlan);
+
+  updateTradePilotData((currentData) => ({
+    ...currentData,
+    plans: normalizedPlans,
+    history: normalizedPlans.filter((plan) => historyStatuses.includes(plan.status)),
+    statistics: calculateStatistics(normalizedPlans)
+  }));
 }
 
 export function addPlanToStorage(plan: TradePlan): TradePlan[] {

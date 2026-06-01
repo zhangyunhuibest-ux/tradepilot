@@ -13,6 +13,17 @@ export function useLivePrice(symbol) {
   });
 
   useEffect(() => {
+    if (!symbol.trim()) {
+      setState({
+        price: null,
+        source: "--",
+        updatedAt: null,
+        isLoading: false,
+        error: null
+      });
+      return undefined;
+    }
+
     let isMounted = true;
     let activeController = null;
 

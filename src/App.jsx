@@ -1,12 +1,14 @@
 import { useState } from "react";
 import Dashboard from "./pages/Dashboard";
+import DataManagement from "./pages/DataManagement";
 import PositionCalculator from "./pages/PositionCalculator";
 import TradePlans from "./pages/TradePlans";
 
 const navItems = [
   { id: "dashboard", label: "Dashboard" },
   { id: "calculator", label: "开仓计算器" },
-  { id: "plans", label: "交易计划" }
+  { id: "plans", label: "交易计划" },
+  { id: "data", label: "数据管理" }
 ];
 
 export default function App() {
@@ -22,7 +24,7 @@ export default function App() {
             </p>
             <p className="mt-1 text-sm text-muted">Personal Crypto Risk Control</p>
           </div>
-          <div className="grid grid-cols-3 gap-2 rounded-lg border border-line bg-panel/80 p-1">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-line bg-panel/80 p-1 sm:grid-cols-4">
             {navItems.map((item) => {
               const isActive = activePage === item.id;
 
@@ -48,6 +50,7 @@ export default function App() {
       {activePage === "dashboard" ? <Dashboard /> : null}
       {activePage === "calculator" ? <PositionCalculator /> : null}
       {activePage === "plans" ? <TradePlans /> : null}
+      {activePage === "data" ? <DataManagement /> : null}
     </div>
   );
 }

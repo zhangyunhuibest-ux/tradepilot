@@ -3,7 +3,11 @@ import TradePlans from "./TradePlans";
 import { STORAGE_KEYS } from "../utils/storage";
 
 function getStoredPlans() {
-  return JSON.parse(window.localStorage.getItem(STORAGE_KEYS.tradePlans));
+  return JSON.parse(window.localStorage.getItem(STORAGE_KEYS.appData)).plans;
+}
+
+function getStoredData() {
+  return JSON.parse(window.localStorage.getItem(STORAGE_KEYS.appData));
 }
 
 function getPlanCard(symbol) {
@@ -25,6 +29,8 @@ describe("TradePlans", () => {
     expect(screen.getByRole("heading", { name: "BTC/USDT" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "ETH/USDT" })).toBeInTheDocument();
     expect(screen.getByText("胜率")).toBeInTheDocument();
+    expect(screen.getAllByText("交易评分").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("A").length).toBeGreaterThan(0);
   });
 
   it("moves a plan to open status and records openTime", () => {
@@ -35,6 +41,7 @@ describe("TradePlans", () => {
     const btcPlan = getStoredPlans().find((plan) => plan.symbol === "BTC/USDT");
     expect(btcPlan.status).toBe("已开仓");
     expect(btcPlan.openTime).toEqual(expect.any(String));
+    expect(getStoredData().history).toEqual(expect.any(Array));
   });
 
   it("archives stopped plans and records final loss", () => {
@@ -47,6 +54,8 @@ describe("TradePlans", () => {
     expect(btcPlan.closeTime).toEqual(expect.any(String));
     expect(btcPlan.finalResult).toBe("loss");
     expect(btcPlan.finalProfit).toBeLessThan(0);
+    expect(getStoredData().history.some((plan) => plan.symbol === "BTC/USDT")).toBe(true);
+    expect(getStoredData().statistics.totalTrades).toBeGreaterThan(0);
   });
 
   it("edits final profit for manual close plans", () => {
@@ -83,6 +92,18 @@ describe("TradePlans", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存新增计划" }));
 
     expect(getStoredPlans().some((plan) => plan.symbol === "DOGE/USDT")).toBe(true);
+    expect(getStoredPlans().find((plan) => plan.symbol === "DOGE/USDT")).toMatchObject({
+      tradeGrade: expect.any(String),
+      tradeScore: expect.any(Number),
+      riskTags: expect.any(Array),
+      review: null,
+      actualEntryPrice: null,
+      actualExitPrice: null,
+      fee: null,
+      slippage: null,
+      notes: "",
+      screenshots: []
+    });
 
     unmount();
     render(<TradePlans />);

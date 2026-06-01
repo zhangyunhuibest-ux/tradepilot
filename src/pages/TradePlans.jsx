@@ -5,6 +5,7 @@ import {
   activeStatuses,
   createPlan,
   historyStatuses,
+  recalculatePlan,
   updatePlanStatus
 } from "../domain/planManager";
 import { calculateStatistics } from "../domain/statisticsManager";
@@ -17,6 +18,14 @@ const statusStyles = {
   已止损: "border-loss/30 bg-loss/10 text-loss",
   手动平仓: "border-violet-400/30 bg-violet-400/10 text-violet-300",
   已取消: "border-muted/30 bg-muted/10 text-muted"
+};
+
+const gradeStyles = {
+  A: "border-profit/30 bg-profit/10 text-profit",
+  B: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+  C: "border-warning/30 bg-warning/10 text-warning",
+  D: "border-orange-400/30 bg-orange-400/10 text-orange-300",
+  F: "border-loss/30 bg-loss/10 text-loss"
 };
 
 const numberFields = [
@@ -133,6 +142,13 @@ function PlanSummary({ plan, muted = false }) {
   return (
     <div className={`grid grid-cols-2 gap-3 text-sm ${muted ? "text-slate-400" : ""}`}>
       <p>
+        <span className="block text-muted">交易评分</span>
+        <span className="font-semibold text-white">{plan.tradeScore}</span>
+        <span className={`ml-2 rounded-full border px-2 py-0.5 text-xs ${gradeStyles[plan.tradeGrade]}`}>
+          {plan.tradeGrade}
+        </span>
+      </p>
+      <p>
         <span className="block text-muted">方向</span>
         <span className={plan.side === "long" ? "text-profit" : "text-loss"}>
           {sideLabel(plan.side)}
@@ -160,6 +176,19 @@ function PlanSummary({ plan, muted = false }) {
           {plan.finalProfit === null ? "--" : formatCurrency(plan.finalProfit)}
         </span>
       </p>
+      <div className="col-span-2">
+        <span className="block text-muted">风险标签</span>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {(plan.riskTags || []).map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-line bg-ink/60 px-2 py-0.5 text-xs text-slate-300"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -182,6 +211,9 @@ function PlanCard({ plan, muted = false, onEdit, onDelete, onStatusChange }) {
             </span>
             <span className="rounded-full border border-line px-2.5 py-1 text-xs text-muted">
               {plan.source}
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 text-xs ${gradeStyles[plan.tradeGrade]}`}>
+              {plan.tradeGrade} · {plan.tradeScore}
             </span>
           </div>
           <p className="mt-1 text-sm text-muted">创建 {formatTime(plan.createdAt)}</p>
@@ -405,22 +437,31 @@ export default function TradePlans() {
 
   function savePlan(planId, updates) {
     setPlans((current) =>
-      current.map((plan) =>
-        plan.id === planId
-          ? {
-              ...plan,
-              ...updates,
-              finalResult:
-                updates.finalProfit === null || updates.finalProfit === undefined
-                  ? plan.finalResult
-                  : updates.finalProfit > 0
-                    ? "win"
-                    : updates.finalProfit < 0
-                      ? "loss"
-                      : "breakeven"
-            }
-          : plan
-      )
+      current.map((plan) => {
+        if (plan.id !== planId) {
+          return plan;
+        }
+
+        const nextPlan = recalculatePlan(plan, {
+          entryPrice: updates.entryPrice,
+          stopLossPrice: updates.stopLossPrice,
+          takeProfitPrice: updates.takeProfitPrice,
+          leverage: updates.leverage
+        });
+
+        return {
+          ...nextPlan,
+          finalProfit: updates.finalProfit,
+          finalResult:
+            updates.finalProfit === null || updates.finalProfit === undefined
+              ? plan.finalResult
+              : updates.finalProfit > 0
+                ? "win"
+                : updates.finalProfit < 0
+                  ? "loss"
+                  : "breakeven"
+        };
+      })
     );
     setEditingPlan(null);
   }

@@ -4,16 +4,19 @@ import {
   ChevronDown,
   ClipboardPlus,
   Search,
+  ShieldCheck,
   ShieldAlert,
   Target,
   TrendingUp,
   Wallet,
   Wifi,
-  WifiOff
+  WifiOff,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createCalculatorPlan, addPlanToStorage } from "../domain/planManager";
 import { calculateRisk } from "../domain/riskCalculator";
+import { scoreTradeQuality } from "../domain/scoreEngine";
 import { useLivePrice } from "../hooks/useLivePrice";
 
 const initialForm = {
@@ -83,7 +86,7 @@ export function calculatePosition({
   takeProfitPrice,
   leverage
 }) {
-  return calculateRisk({
+  const input = {
     side,
     capital,
     riskPercent,
@@ -91,7 +94,14 @@ export function calculatePosition({
     stopLossPrice,
     takeProfitPrice,
     leverage
-  });
+  };
+  const risk = calculateRisk(input);
+  const score = scoreTradeQuality({ ...input, ...risk });
+
+  return {
+    ...risk,
+    ...score
+  };
 }
 
 function formatCurrency(value) {
@@ -194,6 +204,16 @@ function InputField({ field, value, onChange }) {
           value={value}
           onChange={(event) => onChange(field.key, event.target.value)}
         />
+        {value !== "" ? (
+          <button
+            aria-label={`清空${field.label}`}
+            className="border-l border-line px-2.5 py-3 text-muted transition hover:bg-panelSoft hover:text-white"
+            type="button"
+            onClick={() => onChange(field.key, "")}
+          >
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        ) : null}
         <span className="border-l border-line px-3 text-sm text-muted">{field.suffix}</span>
       </div>
     </div>
@@ -223,6 +243,12 @@ function SymbolSelect({ value, onChange }) {
     onChange(symbol);
   }
 
+  function clearSymbol() {
+    setQuery("");
+    setIsOpen(true);
+    onChange("");
+  }
+
   return (
     <div className="relative">
       <label className="text-sm font-medium text-slate-300" htmlFor="calculator-symbol">
@@ -238,7 +264,7 @@ function SymbolSelect({ value, onChange }) {
           aria-autocomplete="list"
           aria-controls="symbol-options"
           aria-expanded={isOpen}
-          className="w-full rounded-lg border border-line bg-ink/70 py-3 pl-10 pr-11 text-base text-white outline-none placeholder:text-muted focus:border-profit/70"
+          className="w-full rounded-lg border border-line bg-ink/70 py-3 pl-10 pr-20 text-base text-white outline-none placeholder:text-muted focus:border-profit/70"
           placeholder="搜索币种，例如 BTC / Solana"
           role="combobox"
           type="text"
@@ -250,6 +276,17 @@ function SymbolSelect({ value, onChange }) {
           }}
           onFocus={() => setIsOpen(true)}
         />
+        {query ? (
+          <button
+            aria-label="清空币种"
+            className="absolute right-11 top-1/2 -translate-y-1/2 rounded-md p-2 text-muted transition hover:bg-panelSoft hover:text-white"
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={clearSymbol}
+          >
+            <X aria-hidden="true" className="h-5 w-5" />
+          </button>
+        ) : null}
         <button
           aria-label="展开币种列表"
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-2 text-muted transition hover:bg-panelSoft hover:text-white"
@@ -388,6 +425,62 @@ function LiquidationRiskCard({ calculation }) {
   );
 }
 
+const gradeTone = {
+  A: "border-profit/30 bg-profit/10 text-profit",
+  B: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+  C: "border-warning/30 bg-warning/10 text-warning",
+  D: "border-orange-400/30 bg-orange-400/10 text-orange-300",
+  F: "border-loss/30 bg-loss/10 text-loss"
+};
+
+function TradeQualityCard({ calculation }) {
+  return (
+    <section className="mt-5 rounded-lg border border-line/80 bg-ink/80 p-4 shadow-trading">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-profit">
+            Trade Quality
+          </p>
+          <h3 className="mt-2 text-xl font-semibold text-white">交易质量评分</h3>
+          <p className="mt-1 text-xs text-muted">
+            根据盈亏比、风险比例、爆仓安全空间、止损距离和杠杆生成。
+          </p>
+        </div>
+        <div className={`flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold ${gradeTone[calculation.tradeGrade]}`}>
+          <ShieldCheck aria-hidden="true" className="h-4 w-4" />
+          {calculation.tradeGrade}
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-[0.8fr_1.2fr] gap-3">
+        <div className="rounded-md border border-line bg-panel/60 p-4">
+          <p className="text-xs text-muted">总分</p>
+          <p className="mt-2 text-4xl font-semibold text-white">{calculation.tradeScore}</p>
+          <p className="mt-1 text-xs text-muted">/ 100</p>
+        </div>
+        <div className="rounded-md border border-line bg-panel/60 p-4">
+          <p className="text-xs text-muted">风险建议</p>
+          <p className="mt-2 text-sm text-slate-200">{calculation.scoreAdvice}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-md border border-line bg-panel/60 p-4">
+        <p className="text-xs text-muted">风险原因</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {calculation.scoreReasons.map((reason) => (
+            <span
+              key={reason}
+              className="rounded-full border border-line bg-ink/70 px-2.5 py-1 text-xs text-slate-300"
+            >
+              {reason}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function PositionCalculator() {
   const [form, setForm] = useState(initialForm);
   const [shouldSyncEntryPrice, setShouldSyncEntryPrice] = useState(true);
@@ -435,6 +528,13 @@ export default function PositionCalculator() {
   function addToTradePlans() {
     if (!calculation.isValid) {
       setToastMessage("请先检查止损方向");
+      return;
+    }
+
+    if (
+      ["D", "F"].includes(calculation.tradeGrade) &&
+      !window.confirm(`当前交易评分为 ${calculation.tradeGrade}，风险较高。确认添加到交易计划吗？`)
+    ) {
       return;
     }
 
@@ -609,6 +709,7 @@ export default function PositionCalculator() {
           </div>
 
           <LiquidationRiskCard calculation={calculation} />
+          <TradeQualityCard calculation={calculation} />
 
           <button
             className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-profit px-4 py-3 font-semibold text-ink transition hover:bg-profit/90 disabled:cursor-not-allowed disabled:bg-muted"
