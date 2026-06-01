@@ -3,8 +3,34 @@ import { useRef, useState } from "react";
 import {
   clearTradePilotData,
   exportTradePilotData,
+  getTradePilotData,
   importTradePilotData
 } from "../utils/storage";
+
+const planColumns = [
+  ["createdAt", "创建时间"],
+  ["symbol", "币种"],
+  ["side", "方向"],
+  ["status", "状态"],
+  ["entryPrice", "开仓价"],
+  ["stopLossPrice", "止损价"],
+  ["takeProfitPrice", "止盈价"],
+  ["leverage", "杠杆"],
+  ["riskPercent", "风险比例"],
+  ["maxLoss", "最大亏损"],
+  ["quantity", "建议数量"],
+  ["positionValue", "仓位价值"],
+  ["margin", "保证金"],
+  ["expectedProfit", "预期盈利"],
+  ["rewardRiskRatio", "盈亏比"],
+  ["tradeScore", "评分"],
+  ["tradeGrade", "等级"],
+  ["liquidationRiskLevel", "爆仓风险"],
+  ["openTime", "开仓时间"],
+  ["closeTime", "结束时间"],
+  ["finalProfit", "最终盈亏"],
+  ["notes", "备注"]
+];
 
 function ActionCard({ icon, title, description, children }) {
   return (
@@ -35,6 +61,22 @@ export default function DataManagement() {
     link.click();
     URL.revokeObjectURL(url);
     setStatusMessage("数据已导出为 JSON");
+  }
+
+  function exportExcel() {
+    const data = getTradePilotData();
+    const workbook = buildExcelWorkbook(data);
+    const blob = new Blob([workbook], {
+      type: "application/vnd.ms-excel;charset=utf-8"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `tradepilot-data-${new Date().toISOString().slice(0, 10)}.xls`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatusMessage("数据已导出为 Excel");
   }
 
   function importJson(event) {
@@ -104,16 +146,25 @@ export default function DataManagement() {
         <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <ActionCard
             icon={<Download aria-hidden="true" className="h-5 w-5" />}
-            title="导出 JSON"
-            description="将当前本地数据导出为 JSON 文件，便于备份或迁移。"
+            title="导出数据"
+            description="将当前本地数据导出为 JSON 或 Excel 文件，便于备份、迁移和复盘。"
           >
-            <button
-              className="w-full rounded-lg bg-profit px-4 py-3 font-semibold text-ink transition hover:bg-profit/90"
-              type="button"
-              onClick={exportJson}
-            >
-              导出 JSON
-            </button>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1">
+              <button
+                className="w-full rounded-lg bg-profit px-4 py-3 font-semibold text-ink transition hover:bg-profit/90"
+                type="button"
+                onClick={exportJson}
+              >
+                导出 JSON
+              </button>
+              <button
+                className="w-full rounded-lg border border-profit/40 bg-profit/10 px-4 py-3 font-semibold text-profit transition hover:bg-profit/15"
+                type="button"
+                onClick={exportExcel}
+              >
+                导出 Excel
+              </button>
+            </div>
           </ActionCard>
 
           <ActionCard
@@ -155,4 +206,66 @@ export default function DataManagement() {
       </div>
     </main>
   );
+}
+
+function buildExcelWorkbook(data) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    ${buildSheet("交易计划", data.plans || [])}
+    ${buildSheet("历史交易", data.history || [])}
+  </body>
+</html>`;
+}
+
+function buildSheet(title, rows) {
+  return `
+    <table>
+      <caption>${escapeHtml(title)}</caption>
+      <thead>
+        <tr>${planColumns.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join("")}</tr>
+      </thead>
+      <tbody>
+        ${
+          rows.length > 0
+            ? rows
+                .map(
+                  (row) =>
+                    `<tr>${planColumns
+                      .map(([key]) => `<td>${escapeHtml(formatExcelCell(row?.[key]))}</td>`)
+                      .join("")}</tr>`
+                )
+                .join("")
+            : `<tr><td colspan="${planColumns.length}">暂无数据</td></tr>`
+        }
+      </tbody>
+    </table>`;
+}
+
+function formatExcelCell(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
