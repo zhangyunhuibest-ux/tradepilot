@@ -9,91 +9,19 @@ import {
   TrendingUp
 } from "lucide-react";
 
-const stats = [
-  {
-    label: "账户本金",
-    value: "$25,000",
-    helper: "本地记录资金快照",
-    tone: "neutral",
-    icon: BarChart3
-  },
-  {
-    label: "单笔风险比例",
-    value: "1.5%",
-    helper: "建议控制在 1%-2%",
-    tone: "warning",
-    icon: Target
-  },
-  {
-    label: "今日盈亏",
-    value: "+$428",
-    helper: "+1.71% / 2 笔交易",
-    tone: "profit",
-    icon: TrendingUp
-  },
-  {
-    label: "本周盈亏",
-    value: "+$1,280",
-    helper: "连续 3 天净值增长",
-    tone: "profit",
-    icon: LineChart
-  },
-  {
-    label: "胜率",
-    value: "62.5%",
-    helper: "最近 24 笔样本",
-    tone: "profit",
-    icon: Activity
-  },
-  {
-    label: "最大回撤",
-    value: "-4.8%",
-    helper: "低于预警阈值 8%",
-    tone: "loss",
-    icon: TrendingDown
-  },
-  {
-    label: "当前交易计划",
-    value: "5",
-    helper: "2 个等待触发",
-    tone: "neutral",
-    icon: ClipboardList
-  },
-  {
-    label: "风险等级",
-    value: "Risk Normal",
-    helper: "仓位暴露处于可控区间",
-    tone: "safe",
-    icon: ShieldCheck
-  }
-];
+import { buildDashboardViewModel } from "../domain/dashboardManager";
+import { getTradePilotData } from "../utils/storage";
 
-const recentTrades = [
-  {
-    symbol: "BTC/USDT",
-    side: "Long",
-    pnl: "+$320",
-    rr: "R:R 2.4",
-    status: "已复盘",
-    tone: "profit"
-  },
-  {
-    symbol: "ETH/USDT",
-    side: "Short",
-    pnl: "-$115",
-    rr: "R:R 0.8",
-    status: "待复盘",
-    tone: "loss"
-  },
-  {
-    symbol: "SOL/USDT",
-    side: "Long",
-    pnl: "+$223",
-    rr: "R:R 1.9",
-    status: "已复盘",
-    tone: "profit"
-  }
-];
+const statIcons = {
+  账户本金: BarChart3,
+  单笔风险比例: Target,
+  今日盈亏: TrendingUp,
+  本周盈亏: LineChart,
+  胜率: Activity,
+  最大回撤: TrendingDown,
+  当前交易计划: ClipboardList,
+  风险等级: ShieldCheck
+};
 
 const toneStyles = {
   neutral: {
@@ -124,7 +52,7 @@ const toneStyles = {
 };
 
 function StatCard({ stat }) {
-  const Icon = stat.icon;
+  const Icon = statIcons[stat.label] || BarChart3;
   const styles = toneStyles[stat.tone];
 
   return (
@@ -174,6 +102,9 @@ function RecentTradeItem({ trade }) {
 }
 
 export default function Dashboard() {
+  const dashboard = buildDashboardViewModel(getTradePilotData());
+  const badgeStyles = toneStyles[dashboard.riskBadge.tone];
+
   return (
     <main className="min-h-screen px-4 py-5 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -187,9 +118,11 @@ export default function Dashboard() {
                 TradePilot
               </h1>
             </div>
-            <div className="flex w-fit items-center gap-2 rounded-full border border-profit/25 bg-profit/10 px-3 py-2 text-sm font-medium text-profit">
-              <span className="h-2 w-2 rounded-full bg-profit shadow-[0_0_16px_rgba(31,209,135,0.85)]" />
-              Risk Normal
+            <div
+              className={`flex w-fit items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium ${badgeStyles.badge}`}
+            >
+              <span className="h-2 w-2 rounded-full bg-current shadow-[0_0_16px_currentColor]" />
+              {dashboard.riskBadge.label}
             </div>
           </div>
         </header>
@@ -198,7 +131,7 @@ export default function Dashboard() {
           aria-label="交易风控指标"
           className="grid grid-cols-1 gap-4 md:grid-cols-2"
         >
-          {stats.map((stat) => (
+          {dashboard.stats.map((stat) => (
             <StatCard key={stat.label} stat={stat} />
           ))}
         </section>
@@ -210,17 +143,23 @@ export default function Dashboard() {
                 最近交易记录
               </h2>
               <p className="mt-1 text-sm text-muted">
-                最近执行的计划与复盘状态，后续将接入本地交易日志。
+                来自本地交易计划与生命周期记录。
               </p>
             </div>
-            <span className="text-sm text-slate-400">3 records</span>
+            <span className="text-sm text-slate-400">{dashboard.recordCountLabel}</span>
           </div>
 
-          <ul className="mt-5 grid grid-cols-1 gap-3">
-            {recentTrades.map((trade) => (
-              <RecentTradeItem key={`${trade.symbol}-${trade.side}`} trade={trade} />
-            ))}
-          </ul>
+          {dashboard.recentTrades.length > 0 ? (
+            <ul className="mt-5 grid grid-cols-1 gap-3">
+              {dashboard.recentTrades.map((trade) => (
+                <RecentTradeItem key={`${trade.symbol}-${trade.side}-${trade.status}`} trade={trade} />
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-5 rounded-lg border border-dashed border-line bg-panelSoft/35 px-4 py-8 text-center text-sm text-muted">
+              暂无历史交易记录。完成或取消交易计划后，这里会自动显示最近记录。
+            </div>
+          )}
         </section>
       </div>
     </main>
